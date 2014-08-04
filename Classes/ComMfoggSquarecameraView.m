@@ -10,37 +10,46 @@
 #import <CoreMedia/CoreMedia.h>
 
 
+
 @implementation ComMfoggSquarecameraView
 
 // used for KVO observation of the @"capturingStillImage" property to perform flash bulb animation
 static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCaptureStillImageIsCapturingStillImageContext";
 
-- (void) dealloc
-{
-	[self teardownAVCapture];
-
-	self.prevLayer = nil;
-	self.stillImage = nil;
-	self.stillImageOutput = nil;
-	self.captureDevice = nil;
-
-	RELEASE_TO_NIL(square);
-
-	[super dealloc];
-}
-
+#pragma mark - Lifetime
 -(void)initializeState
 {
 	[super initializeState];
-
-	self.prevLayer = nil;
-	self.stillImage = nil;
-	self.stillImageOutput = nil;
-	self.captureDevice = nil;
-
-  // Set defaults
-  self.camera = @"back"; // Default camera is 'back'
+    
+    [self setPrevLayer:nil];
+    [self setStillImage:nil];
+    [self setStillImageOutput:nil];
+    [self setCaptureDevice:nil];
+    
+    // Set defaults
+    self.camera = @"back"; // Default camera is 'back'
 }
+
+
+
+- (void) dealloc
+{
+    NSLog(@"[INFO]  --------------------- dealloc has been called");
+	[self teardownAVCapture];
+
+    [self setPrevLayer:nil];
+    [self setStillImage:nil];
+    [self setStillImageOutput:nil];
+    [self setCaptureDevice:nil];
+    [self setCamera:nil];
+
+    RELEASE_TO_NIL(flashView);
+	RELEASE_TO_NIL(square);
+
+    NSLog(@"[INFO] ---------------------  Self : %@", self);
+	[super dealloc];
+}
+
 
 -(void)frameSizeChanged:(CGRect)frame bounds:(CGRect)bounds
 {
@@ -48,6 +57,7 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
   	[TiUtils setView:self.square positionRect:bounds];
 }
 
+#pragma mark - Actions
 - (void)turnFlashOn:(id)args
 {
 	if([self.captureDevice lockForConfiguration:true]){
@@ -74,19 +84,7 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
 	};
 };
 
-// utility routine to display error alert if takePicture fails
-- (void)displayErrorOnMainQueue:(NSError *)error withMessage:(NSString *)message
-{
-	dispatch_async(dispatch_get_main_queue(), ^(void) {
-		UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:[NSString stringWithFormat:@"%@ (%d)", message, (int)[error code]]
-			message:[error localizedDescription]
-			delegate:nil 
-			cancelButtonTitle:@"Dismiss" 
-			otherButtonTitles:nil];
-		[alertView show];
-		[alertView release];
-	});
-}
+
 
 - (void)takePhoto:(id)args
 {
@@ -180,24 +178,6 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
   return flippedImage;
 }
 
--(void)setCamera_:(id)value
-{
-	NSString *camera = [TiUtils stringValue:value];
-
-	if (![camera isEqualToString: @"front"] && ![camera isEqualToString: @"back"]) {
-		NSLog(@"[ERROR] Attempted to set camera that is not front or back... ignoring.");
-	} else {
-		self.camera = camera;
-
-		[self setCaptureDevice];
-
-		NSDictionary *event = [NSDictionary dictionaryWithObjectsAndKeys:
-			self.camera, @"camera",
-			nil];
-
-		[self.proxy fireEvent:@"onCameraChange" withObject:event];
-	}
-}
 
 -(void)pause:(id)args
 {
@@ -239,10 +219,49 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
     };
 };
 
+#pragma mark - Configurations
+//-(void)setCamera_:(id)value
+//{
+//    NSLog(@"[INFO] --------------------- --------------------- --------------------- setCamera is called");
+//	NSString *camera = [TiUtils stringValue:value];
+//    
+//	if (![camera isEqualToString: @"front"] && ![camera isEqualToString: @"back"]) {
+//		NSLog(@"[ERROR] Attempted to set camera that is not front or back... ignoring.");
+//	} else {
+//		self.camera = camera;
+//        
+//		[self setCaptureDevice];
+//        
+//		NSDictionary *event = [NSDictionary dictionaryWithObjectsAndKeys:
+//                               self.camera, @"camera",
+//                               nil];
+//        
+//		[self.proxy fireEvent:@"onCameraChange" withObject:event];
+//	}
+//}
+
+
+// utility routine to display error alert if takePicture fails
+- (void)displayErrorOnMainQueue:(NSError *)error withMessage:(NSString *)message
+{
+	dispatch_async(dispatch_get_main_queue(), ^(void) {
+		UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:[NSString stringWithFormat:@"%@ (%d)", message, (int)[error code]]
+                                                            message:[error localizedDescription]
+                                                           delegate:nil
+                                                  cancelButtonTitle:@"Dismiss" 
+                                                  otherButtonTitles:nil];
+		[alertView show];
+		[alertView release];
+	});
+}
+
 -(void)setCaptureDevice
 {
+    NSLog(@"[INFO] --------------------- --------------------- setCaptureDevice is called");
+    
 	AVCaptureDevicePosition desiredPosition;
 	
+    NSLog(@"[INFO] --------------------- Initiate the settings");
 	if ([self.camera isEqualToString: @"back"]){
 		desiredPosition = AVCaptureDevicePositionBack;
 
@@ -258,24 +277,36 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
 		self.captureSession.sessionPreset = AVCaptureSessionPresetHigh;
 	};
     
+    
+    NSLog(@"[INFO] --------------------- After the orientation and front/back camera setup");
     for (AVCaptureDevice *d in [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo]) {
+        NSLog(@"[INFO] --------------------- AVCapture device : %@", d);
 		if ([d position] == desiredPosition) {
 			[[self.prevLayer session] beginConfiguration];
             
-			AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:d error:nil];
+            NSError *error = nil;
             
-			for (AVCaptureInput *oldInput in [[self.prevLayer session] inputs]) {
-				[[self.prevLayer session] removeInput:oldInput];
-			}
+			AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:d error:&error];
+            NSLog(@"[ERROR] -------------------- --------------------- %@", error);
+            
+//
+//			for (AVCaptureInput *oldInput in [[self.prevLayer session] inputs]) {
+//                NSLog(@"[INFO] --------------------- Removing from preview layer %@", oldInput);
+//				[[self.prevLayer session] removeInput:oldInput];
+//			}
+            
 			[[self.prevLayer session] addInput:input];
 			[[self.prevLayer session] commitConfiguration];
 			break;
 		};
 	};
+    
+    NSLog(@"[INFO] --------------------- After the commit configurations for every devices with media type AV");
 }
 
 -(UIView*)square
-{   
+{
+    NSLog(@"[INFO] ---------------------  square is called");
 	if (square == nil) {
 
 		square = [[UIView alloc] initWithFrame:[self frame]];
@@ -287,79 +318,84 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
 
 		if ([UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypeCamera]) {
 
-			self.captureSession = [[AVCaptureSession alloc] init];
-
-			self.prevLayer = [[AVCaptureVideoPreviewLayer alloc] initWithSession:self.captureSession];
-			self.prevLayer.frame = self.square.bounds;
-			self.prevLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
-			[self.square.layer addSublayer:self.prevLayer];
-
-			self.captureDevice = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
-
-			if([self.captureDevice lockForConfiguration:true]){
+            AVCaptureSession *session = [[AVCaptureSession alloc] init];
+            
+            [self setCaptureSession:session];
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSLog(@"[INFO] --------------------- dispatch main is running");
                 
-                if([self.captureDevice isFlashModeSupported:AVCaptureFlashModeOff]){
-                    [self.captureDevice setFlashMode:AVCaptureFlashModeOff];
-                    self.flashOn = NO;
+                AVCaptureVideoPreviewLayer *previewLayer = [[AVCaptureVideoPreviewLayer alloc] initWithSession:session];
+                
+                self.prevLayer = [[AVCaptureVideoPreviewLayer alloc] initWithSession:self.captureSession];
+                self.prevLayer.frame = self.square.bounds;
+                self.prevLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
+                [self.square.layer addSublayer:self.prevLayer];
+                
+                self.captureDevice = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
+                
+                NSLog(@"[INFO] --------------------- Set the media type");
+                
+                if([self.captureDevice lockForConfiguration:true]){
+                    
+                    if([self.captureDevice isFlashModeSupported:AVCaptureFlashModeOff]){
+                        [self.captureDevice setFlashMode:AVCaptureFlashModeOff];
+                        self.flashOn = NO;
+                    };
+                    
+                    [self.captureDevice lockForConfiguration:false];
                 };
                 
-				[self.captureDevice lockForConfiguration:false];
-			};
-
-			// Set the default camera
-			[self setCaptureDevice];
-
-			NSError *error = nil;
-			
-			self.videoDataOutput = [[[AVCaptureVideoDataOutput alloc] init] autorelease];
-            [self.videoDataOutput setAlwaysDiscardsLateVideoFrames:YES]; // discard if the data output queue is blocked (as we process the still image)
-
-            // Now do the dispatch queue .. 
-            videoDataOutputQueue = dispatch_queue_create("videoDataOutputQueue", DISPATCH_QUEUE_SERIAL);
-            [self.videoDataOutput setSampleBufferDelegate:self queue:videoDataOutputQueue];
-
-            self.stillImageOutput = [[AVCaptureStillImageOutput alloc] init];
-
-            [self.stillImageOutput addObserver:self forKeyPath:@"capturingStillImage" options:NSKeyValueObservingOptionNew context:AVCaptureStillImageIsCapturingStillImageContext];
-
-            NSDictionary *outputSettings = [[NSDictionary alloc] initWithObjectsAndKeys: AVVideoCodecJPEG, AVVideoCodecKey, nil];
-            [self.stillImageOutput setOutputSettings:outputSettings];
-
-            [self.captureSession addOutput:self.stillImageOutput];
-            
-            [outputSettings release];
-
-            NSDictionary *rgbOutputSettings = [NSDictionary dictionaryWithObject:
-            	[NSNumber numberWithInt:kCMPixelFormat_32BGRA] forKey:(id)kCVPixelBufferPixelFormatTypeKey];
-
-            [self.videoDataOutput setVideoSettings:rgbOutputSettings];
-
-            [self.captureSession addOutput:self.videoDataOutput];
-
-            [[self.videoDataOutput connectionWithMediaType:AVMediaTypeVideo] setEnabled:NO];
-
-            // and off we go! ... 
-            [self.captureSession startRunning];
-            
-            NSDictionary *event = [NSDictionary dictionaryWithObjectsAndKeys:
-                                   @"started", @"state",
-                                   nil];
-            
-            [self.proxy fireEvent:@"stateChange" withObject:event];
-
-            // uh oh ... 
+                NSLog(@"[INFO] --------------------- Finish the lock for configuration");
+                
+                // Set the default camera
+                [self setCaptureDevice];
+                
+                NSError *error = nil;
+                self.stillImageOutput = [[AVCaptureStillImageOutput alloc] init];
+                
+                [self.stillImageOutput addObserver:self forKeyPath:@"capturingStillImage" options:NSKeyValueObservingOptionNew context:AVCaptureStillImageIsCapturingStillImageContext];
+                
+                NSLog(@"[INFO] --------------------- After adding observer");
+                
+                NSDictionary *outputSettings = [[NSDictionary alloc] initWithObjectsAndKeys: AVVideoCodecJPEG, AVVideoCodecKey, nil];
+                [self.stillImageOutput setOutputSettings:outputSettings];
+                
+                [self.captureSession addOutput:self.stillImageOutput];
+                
+                NSLog(@"[INFO] --------------------- After setting output and session");
+                
+                [outputSettings release];
+                
+                // and off we go! ...
+                [self.captureSession startRunning];
+                
+                NSLog(@"[INFO] --------------------- After start running");
+                
+                NSDictionary *event = [NSDictionary dictionaryWithObjectsAndKeys:
+                                       @"started", @"state",
+                                       nil];
+                
+                [self.proxy fireEvent:@"stateChange" withObject:event];
+                
+                // uh oh ... 
             bail:
-            [self.captureSession release];
-            if (error) {
-            	UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:[NSString stringWithFormat:@"Failed with error %d", (int)[error code]]
-            		message:[error localizedDescription]
-            		delegate:nil 
-            		cancelButtonTitle:@"oh dear" 
-            		otherButtonTitles:nil];
-            	[alertView show];
-            	[alertView release];
-            	[self teardownAVCapture];
-            }
+                [self.captureSession release];
+                if (error) {
+                    UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:[NSString stringWithFormat:@"Failed with error %d", (int)[error code]]
+                                                                        message:[error localizedDescription]
+                                                                       delegate:nil 
+                                                              cancelButtonTitle:@"oh dear" 
+                                                              otherButtonTitles:nil];
+                    [alertView show];
+                    [alertView release];
+                    [self teardownAVCapture];
+                }
+                
+                
+            }); // End of the block
+            
+            
             
           } else {
             // If camera is NOT avaialble
@@ -376,10 +412,10 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
 - (void)teardownAVCapture
 {
 
-    NSLog(@"[INFO] TEAR DOWN CAPTURE");
+    NSLog(@"[INFO] ---------------------  TEAR DOWN CAPTURE");
 
     [self.captureSession removeInput:self.videoInput];
-    [self.captureSession removeOutput:self.videoDataOutput];
+//    [self.captureSession removeOutput:self.videoDataOutput];
 
     [self.captureSession stopRunning];
     
@@ -389,9 +425,6 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
     
     [self.proxy fireEvent:@"stateChange" withObject:event];
 
-    [_videoDataOutput release];
-    if (videoDataOutputQueue)
-    	dispatch_release(videoDataOutputQueue);
     [self.stillImageOutput removeObserver:self forKeyPath:@"capturingStillImage"];
     [self.stillImageOutput release];
     [self.prevLayer removeFromSuperlayer];
