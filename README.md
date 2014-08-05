@@ -1,6 +1,8 @@
 Appcelerator Titanium :: SquareCamera
 =============
 
+* __NOTE:__ This fork don't have the video funcionality, and runs in the main thread, if you app don't have an intense use of the camera inside of a navigationGroup, use the original module by mikefogg, this update I made was only to work correctly in a project I'm working on.
+
 An Appcelerator Titanium module that uses AVFoundation to allow for a much more customizable camera.
 
 I have wanted (multiple times now) the option of being able to customize the camera size, shape, and functionality without just using the camera overlay. This lets you do that :)
