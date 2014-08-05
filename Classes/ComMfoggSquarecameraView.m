@@ -261,7 +261,6 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
     
 	AVCaptureDevicePosition desiredPosition;
 	
-    NSLog(@"[INFO] --------------------- Initiate the settings");
 	if ([self.camera isEqualToString: @"back"]){
 		desiredPosition = AVCaptureDevicePositionBack;
 
@@ -278,35 +277,36 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
 	};
     
     
-    NSLog(@"[INFO] --------------------- After the orientation and front/back camera setup");
-    for (AVCaptureDevice *d in [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo]) {
-        NSLog(@"[INFO] --------------------- AVCapture device : %@", d);
-		if ([d position] == desiredPosition) {
-			[[self.prevLayer session] beginConfiguration];
+    for (AVCaptureDevice *device in [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo]) {
+		if ([device position] == desiredPosition) {
+//            [[self captureSession] beginConfiguration];
             
             NSError *error = nil;
+			AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:device error:&error];
             
-			AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:d error:&error];
-            NSLog(@"[ERROR] -------------------- --------------------- %@", error);
+            NSLog(@"[INFO] --------------------- Input : %@", input);
+            NSLog(@"[INFO] --------------------- Error : %@", error);
+            NSLog(@"[INFO] --------------------- device : %@", device);
+            NSLog(@"[INFO] --------------------- Session : %@", [self captureSession]);
+            NSLog(@"[INFO] --------------------- Layer Session : %@", [self.prevLayer session]);
             
-//
-//			for (AVCaptureInput *oldInput in [[self.prevLayer session] inputs]) {
-//                NSLog(@"[INFO] --------------------- Removing from preview layer %@", oldInput);
-//				[[self.prevLayer session] removeInput:oldInput];
-//			}
+            [self.captureSession removeInput:self.videoInput];
+            if( [[self captureSession] canAddInput:input]){
+                [[self captureSession] addInput:input];
+                [self setVideoInput:input];
+            }else{
+                [[self captureSession] addInput:[self videoInput]];
+            }
             
-			[[self.prevLayer session] addInput:input];
-			[[self.prevLayer session] commitConfiguration];
+//            [[self captureSession] commitConfiguration];
 			break;
 		};
 	};
     
-    NSLog(@"[INFO] --------------------- After the commit configurations for every devices with media type AV");
 }
 
 -(UIView*)square
 {
-    NSLog(@"[INFO] ---------------------  square is called");
 	if (square == nil) {
 
 		square = [[UIView alloc] initWithFrame:[self frame]];
@@ -334,19 +334,29 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
                 
                 self.captureDevice = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
                 
-                NSLog(@"[INFO] --------------------- Set the media type");
-                
-                if([self.captureDevice lockForConfiguration:true]){
+                if([self.captureDevice lockForConfiguration:nil]){
                     
                     if([self.captureDevice isFlashModeSupported:AVCaptureFlashModeOff]){
                         [self.captureDevice setFlashMode:AVCaptureFlashModeOff];
                         self.flashOn = NO;
                     };
                     
-                    [self.captureDevice lockForConfiguration:false];
-                };
+                    [self.captureDevice unlockForConfiguration];
+                }
                 
-                NSLog(@"[INFO] --------------------- Finish the lock for configuration");
+                
+                NSError *errorDevice = nil;
+                AVCaptureDeviceInput *videoDeviceInput = [AVCaptureDeviceInput deviceInputWithDevice:[self captureDevice] error:&errorDevice];
+                
+                if( [session canAddInput:videoDeviceInput]){
+                    [session addInput:videoDeviceInput];
+                    [self setVideoInput:videoDeviceInput];
+                }else{
+                    NSLog(@"[ERROR] --------------------- Can't add the device : %@ to the session", [self captureDevice]);
+                    NSLog(@"[ERROR] --------------------- Session %@", session);
+                }
+                
+                
                 
                 // Set the default camera
                 [self setCaptureDevice];
@@ -356,21 +366,18 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
                 
                 [self.stillImageOutput addObserver:self forKeyPath:@"capturingStillImage" options:NSKeyValueObservingOptionNew context:AVCaptureStillImageIsCapturingStillImageContext];
                 
-                NSLog(@"[INFO] --------------------- After adding observer");
                 
                 NSDictionary *outputSettings = [[NSDictionary alloc] initWithObjectsAndKeys: AVVideoCodecJPEG, AVVideoCodecKey, nil];
                 [self.stillImageOutput setOutputSettings:outputSettings];
                 
                 [self.captureSession addOutput:self.stillImageOutput];
                 
-                NSLog(@"[INFO] --------------------- After setting output and session");
                 
                 [outputSettings release];
                 
                 // and off we go! ...
                 [self.captureSession startRunning];
                 
-                NSLog(@"[INFO] --------------------- After start running");
                 
                 NSDictionary *event = [NSDictionary dictionaryWithObjectsAndKeys:
                                        @"started", @"state",
