@@ -32,6 +32,7 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
 
 
 
+
 - (void) dealloc
 {
     NSLog(@"[INFO]  --------------------- dealloc has been called");
@@ -219,6 +220,7 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
     };
 };
 
+
 #pragma mark - Configurations
 //-(void)setCamera_:(id)value
 //{
@@ -317,6 +319,9 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
 		[self addSubview:self.stillImage];
 
 		if ([UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypeCamera]) {
+            
+            
+            AVCaptureDevice *device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
 
             AVCaptureSession *session = [[AVCaptureSession alloc] init];
             
@@ -348,56 +353,63 @@ static const NSString *AVCaptureStillImageIsCapturingStillImageContext = @"AVCap
                 NSError *errorDevice = nil;
                 AVCaptureDeviceInput *videoDeviceInput = [AVCaptureDeviceInput deviceInputWithDevice:[self captureDevice] error:&errorDevice];
                 
-                if( [session canAddInput:videoDeviceInput]){
-                    [session addInput:videoDeviceInput];
-                    [self setVideoInput:videoDeviceInput];
+                
+                if(videoDeviceInput){
+                    if( [session canAddInput:videoDeviceInput]){
+                        [session addInput:videoDeviceInput];
+                        [self setVideoInput:videoDeviceInput];
+                    }else{
+                        NSLog(@"[ERROR] --------------------- Can't add the device : %@ to the session", [self captureDevice]);
+                        NSLog(@"[ERROR] --------------------- Session %@", session);
+                    }
+                    
+                    
+                    
+                    // Set the default camera
+                    [self setCaptureDevice];
+                    
+                    NSError *error = nil;
+                    self.stillImageOutput = [[AVCaptureStillImageOutput alloc] init];
+                    
+                    [self.stillImageOutput addObserver:self forKeyPath:@"capturingStillImage" options:NSKeyValueObservingOptionNew context:AVCaptureStillImageIsCapturingStillImageContext];
+                    
+                    
+                    NSDictionary *outputSettings = [[NSDictionary alloc] initWithObjectsAndKeys: AVVideoCodecJPEG, AVVideoCodecKey, nil];
+                    [self.stillImageOutput setOutputSettings:outputSettings];
+                    
+                    [self.captureSession addOutput:self.stillImageOutput];
+                    
+                    
+                    [outputSettings release];
+                    
+                    // and off we go! ...
+                    [self.captureSession startRunning];
+                    
+                    
+                    NSDictionary *event = [NSDictionary dictionaryWithObjectsAndKeys:
+                                           @"started", @"state",
+                                           nil];
+                    
+                    [self.proxy fireEvent:@"stateChange" withObject:event];
+                    
+                    // uh oh ...
+                bail:
+                    [self.captureSession release];
+                    if (error) {
+                        UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:[NSString stringWithFormat:@"Failed with error %d", (int)[error code]]
+                                                                            message:[error localizedDescription]
+                                                                           delegate:nil
+                                                                  cancelButtonTitle:@"oh dear"
+                                                                  otherButtonTitles:nil];
+                        [alertView show];
+                        [alertView release];
+                        [self teardownAVCapture];
+                    }
                 }else{
-                    NSLog(@"[ERROR] --------------------- Can't add the device : %@ to the session", [self captureDevice]);
-                    NSLog(@"[ERROR] --------------------- Session %@", session);
+                    [self.proxy fireEvent:@"noPermissions" withObject:nil];
+                    NSLog(@"[ERROR] No permissions available");
                 }
                 
-                
-                
-                // Set the default camera
-                [self setCaptureDevice];
-                
-                NSError *error = nil;
-                self.stillImageOutput = [[AVCaptureStillImageOutput alloc] init];
-                
-                [self.stillImageOutput addObserver:self forKeyPath:@"capturingStillImage" options:NSKeyValueObservingOptionNew context:AVCaptureStillImageIsCapturingStillImageContext];
-                
-                
-                NSDictionary *outputSettings = [[NSDictionary alloc] initWithObjectsAndKeys: AVVideoCodecJPEG, AVVideoCodecKey, nil];
-                [self.stillImageOutput setOutputSettings:outputSettings];
-                
-                [self.captureSession addOutput:self.stillImageOutput];
-                
-                
-                [outputSettings release];
-                
-                // and off we go! ...
-                [self.captureSession startRunning];
-                
-                
-                NSDictionary *event = [NSDictionary dictionaryWithObjectsAndKeys:
-                                       @"started", @"state",
-                                       nil];
-                
-                [self.proxy fireEvent:@"stateChange" withObject:event];
-                
-                // uh oh ... 
-            bail:
-                [self.captureSession release];
-                if (error) {
-                    UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:[NSString stringWithFormat:@"Failed with error %d", (int)[error code]]
-                                                                        message:[error localizedDescription]
-                                                                       delegate:nil 
-                                                              cancelButtonTitle:@"oh dear" 
-                                                              otherButtonTitles:nil];
-                    [alertView show];
-                    [alertView release];
-                    [self teardownAVCapture];
-                }
                 
                 
             }); // End of the block
